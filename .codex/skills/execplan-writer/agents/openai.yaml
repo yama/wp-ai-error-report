@@ -1,0 +1,4 @@
+interface:
+  display_name: "ExecPlan Writer"
+  short_description: "Create and maintain repository ExecPlans"
+  default_prompt: "Create an ExecPlan for this task using AGENTS.md and .agent/PLANS.md rules."
