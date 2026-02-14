@@ -23,6 +23,11 @@ This repository uses ExecPlan as a living design-and-execution document.
 - Include sanitization and escaping decisions (`sanitize_*`, `esc_*`, `wp_kses`).
 - Include compatibility assumptions (minimum WordPress/PHP versions).
 
+## Coding Principles
+
+- Every ExecPlan and implementation must align with `SOLID`, `DRY`, `YAGNI`, `KISS`, `SSOT`, and `PIE`.
+- If a step intentionally deviates, record the reason and tradeoff in `Decision Log`.
+
 ## File Naming
 
 - Save plans in `.agent/plans/`.
