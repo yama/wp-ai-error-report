@@ -25,3 +25,10 @@ WordPress で発生した Fatal 系エラーを検知し、AI で要約してメ
 
 - `config.php` の `debug` を `true` にすると、処理ステップをデバッグログへ出力します。
 - `debug_log_file` が空文字の場合、デフォルトで `wp-content/uploads/wp-ai-error-report/logs/debug.log` に出力します。
+
+## API接続テスト（CLI）
+
+- `config.php` の `api_key` / `model` を使って OpenAI API への疎通確認ができます。
+- 実行コマンド:
+  - `php tools/test-openai-api.php`
+  - `php tools/test-openai-api.php "Reply with exactly: PONG"`
