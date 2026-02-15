@@ -120,12 +120,12 @@ class WPAIErrorReport_ReportSender {
 	}
 
 	private function request_summary($report_data) {
-		$system_prompt = 'あなたはWordPress運用アシスタントです。非エンジニアにも理解できる平易な日本語で要約してください。';
+		$system_prompt = 'あなたはWordPress運用アシスタントです。短く、事実ベースで、日本語の箇条書き要約のみを返してください。';
 		$user_prompt   = $this->build_user_prompt($report_data);
 
 		$payload = array(
 			'model'             => $this->model,
-			'max_output_tokens' => 800,
+			'max_output_tokens' => 320,
 			'input'             => array(
 				array(
 					'role'    => 'system',
@@ -193,8 +193,13 @@ class WPAIErrorReport_ReportSender {
 	private function build_user_prompt($report_data) {
 		$meta_lines = array(
 			'以下はWordPressのFatal系エラーログです。',
-			'運営担当がエンジニアへ連携しやすいように、何が起きているか・想定原因を簡潔な日本語で説明してください。',
-			'箇条書きで出力し、機密情報は推測で補わないでください。',
+			'運営担当がエンジニアへ連携しやすいように、短い要約を作成してください。',
+			'出力ルール:',
+			'- 箇条書きは最大3項目',
+			'- 各項目は1〜2文まで',
+			'- 「何が起きたか」「原因候補」「影響範囲」の3観点を優先',
+			'- 対応手順や提案（例: 対応イメージ）は書かない',
+			'- 機密情報は推測で補わない',
 			'対象ログ行数: ' . $report_data['max_lines'],
 		);
 
