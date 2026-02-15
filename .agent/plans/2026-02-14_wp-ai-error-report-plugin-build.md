@@ -164,7 +164,7 @@
 - ログ・設定値の取り扱い時は `sanitize_text_field`, `sanitize_email`, `esc_html` 等を利用箇所で適用する。
 - Prompt contract (current implementation):
 - System: `あなたはWordPress運用アシスタントです。非エンジニアにも理解できる平易な日本語で要約してください。`
-- User: Fatalログ説明、要約観点（何が起きているか/想定原因/最初の確認事項）、箇条書き指定、機密情報推測禁止、対象行数、巨大ログ時のサイズ明記指示、`LOG START/END` で囲んだ本文。
+- User: Fatalログ説明、要約観点（何が起きているか/想定原因）、箇条書き指定、機密情報推測禁止、対象行数、巨大ログ時のサイズ明記指示、`LOG START/END` で囲んだ本文。
 
 ## Validation
 

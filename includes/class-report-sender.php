@@ -74,7 +74,8 @@ class WPAIErrorReport_ReportSender {
 			return false;
 		}
 
-		if (!$this->send_email($summary)) {
+		$email_body = $this->build_email_body($summary, $report_data);
+		if (!$this->send_email($email_body)) {
 			error_log('WP AI Error Report: wp_mail failed.');
 			return false;
 		}
@@ -192,7 +193,7 @@ class WPAIErrorReport_ReportSender {
 	private function build_user_prompt($report_data) {
 		$meta_lines = array(
 			'以下はWordPressのFatal系エラーログです。',
-			'非エンジニア向けに、何が起きているか・想定原因・最初に確認すべきことを簡潔に日本語で説明してください。',
+			'運営担当がエンジニアへ連携しやすいように、何が起きているか・想定原因を簡潔な日本語で説明してください。',
 			'箇条書きで出力し、機密情報は推測で補わないでください。',
 			'対象ログ行数: ' . $report_data['max_lines'],
 		);
@@ -204,6 +205,24 @@ class WPAIErrorReport_ReportSender {
 		$meta_lines[] = "---- LOG START ----\n" . implode("\n", $report_data['lines']) . "\n---- LOG END ----";
 
 		return implode("\n", $meta_lines);
+	}
+
+	private function build_email_body($summary, $report_data) {
+		$sections = array(
+			'【AI要約】',
+			trim((string) $summary),
+		);
+
+		if ($report_data['is_large']) {
+			$sections[] = '';
+			$sections[] = sprintf('【ログサイズ情報】約 %.2f MB', $report_data['file_size'] / 1024 / 1024);
+		}
+
+		$sections[] = '';
+		$sections[] = sprintf('【エラー原文（末尾 %d 行）】', (int) $report_data['max_lines']);
+		$sections[] = implode("\n", $report_data['lines']);
+
+		return implode("\n", $sections);
 	}
 
 	private function extract_output_text($data) {
