@@ -162,7 +162,7 @@ wp-content/uploads/wp-ai-error-report/logs/
 3. 非エンジニア向け要約を生成
    - 大量ログ時は「xxMBにも及ぶ大きなログが生成されていて、何かが起きている」旨を明記
 4. メール送信（`config.php` の `notification_emails` 宛。空の場合は送信しない）
-5. 送信成功時のみ `error.log` と `last_report_attempted_at.touch` を削除
+5. 送信成功時のみ `error.log` を削除（`last_report_attempted_at.touch` は判定のため保持）
 
 ### 7.4 通知内容
 
@@ -276,7 +276,7 @@ wp-content/uploads/wp-ai-error-report/logs/
 - 通常時/ログ肥大化時ともに最大100行がAI解析・要約送信対象になる
 - ログ肥大化時は、ファイルサイズ情報が要約メールに含まれる
 - 要約メールが `config.php` の宛先メールアドレス宛に届く（空の場合は送信スキップ）
-- レポート送信成功後に `error.log` と `last_report_attempted_at.touch` が削除される
+- レポート送信成功後に `error.log` が削除される（`last_report_attempted_at.touch` は保持される）
 - マスキング対象データが外部送信されない
 
 ## 15. 実装仕様の確定事項

@@ -82,9 +82,6 @@ class WPAIErrorReport_ReportSender {
 		if (!@unlink($this->log_file_path)) {
 			error_log('WP AI Error Report: report sent, but failed to delete error.log.');
 		}
-		if (file_exists($this->schedule_file_path) && !@unlink($this->schedule_file_path)) {
-			error_log('WP AI Error Report: report sent, but failed to delete schedule marker.');
-		}
 
 		return true;
 	}

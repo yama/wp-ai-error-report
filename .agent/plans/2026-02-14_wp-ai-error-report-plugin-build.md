@@ -122,7 +122,7 @@
 - 巨大ログ判定は `WP_AI_ERROR_REPORT_LARGE_LOG_THRESHOLD` をバイト換算して実施する。
 - 巨大ログ時は要約本文にファイルサイズ情報を必ず含める。
 - OpenAI API失敗時/メール失敗時/読み取り失敗時はいずれも `error.log` を保持する。
-- 成功時のみ `error.log` と `last_report_attempted_at.touch` を削除する。
+- 成功時のみ `error.log` を削除し、`last_report_attempted_at.touch` は保持する。
 
 4. OpenAI通信・通知本文生成・送信を実装する。
 - Files:
@@ -193,8 +193,8 @@
 - Evidence location: `wp-content/uploads/wp-ai-error-report/logs/error.log`
 
 - Command: （手動）`last_report_attempted_at.touch` の `filemtime` を1時間以上前にしてページアクセス
-- Expected result: OpenAI要約処理とメール送信が試行され、成功時に `error.log` が削除される
-- Evidence location: メール受信記録、`error.log` / `last_report_attempted_at.touch` 消失確認、WPデバッグログ
+- Expected result: OpenAI要約処理とメール送信が試行され、成功時に `error.log` が削除される（`last_report_attempted_at.touch` は保持）
+- Evidence location: メール受信記録、`error.log` 消失確認、`last_report_attempted_at.touch` 更新時刻、WPデバッグログ
 
 - Command: （手動）`last_report_attempted_at.touch` を現在時刻に更新した直後に再アクセス
 - Expected result: 1時間未満のため再送されない（外部API呼び出し・追加メール送信なし）
@@ -227,4 +227,5 @@
 - 2026-02-15T05:26:42Z `debug` 設定を追加。有効時に `debug.log` へ処理ステップ（判定/送信/API/メール失敗点）を出力できるように実装。
 - 2026-02-15T05:47:55Z コードベース簡素化のためデバッグログ機構を撤去し、通常運用の最小構成へ戻した。
 - 2026-02-15T05:52:47Z 送信間隔設定を `send_interval_minutes`（分指定）へ統一。
+- 2026-02-15T06:02:59Z 送信判定の整合性維持のため、成功時に `last_report_attempted_at.touch` を削除しない運用へ変更。
 - 2026-02-15T05:52:47Z 送信間隔設定を `send_interval_minutes` に変更（デフォルト60分、例: `60 * 3`）。
