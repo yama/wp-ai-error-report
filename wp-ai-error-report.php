@@ -11,6 +11,7 @@ if (!defined('ABSPATH')) {
 }
 
 require_once __DIR__ . '/includes/class-masking.php';
+require_once __DIR__ . '/includes/class-debug-logger.php';
 require_once __DIR__ . '/includes/class-report-sender.php';
 require_once __DIR__ . '/includes/class-error-handler.php';
 
@@ -21,6 +22,8 @@ function wp_ai_error_report_load_config() {
 		'model'               => 'gpt-4.1-mini',
 		'large_log_threshold' => '1MB',
 		'max_lines'           => 100,
+		'debug'               => false,
+		'debug_log_file'      => '',
 	);
 
 	$config_file = __DIR__ . '/config.php';
@@ -66,6 +69,17 @@ $report_config = wp_ai_error_report_load_config();
 
 $log_file_path      = wp_ai_error_report_upload_log_path();
 $schedule_file_path = dirname($log_file_path) . '/last_report_attempted_at.touch';
-$report_sender      = new WPAIErrorReport_ReportSender($log_file_path, $schedule_file_path, $report_config);
-$handler            = new WPAIErrorReport_ErrorHandler($log_file_path, $report_sender);
+$debug_log_file     = $report_config['debug_log_file'] ? (string) $report_config['debug_log_file'] : dirname($log_file_path) . '/debug.log';
+$debug_logger       = new WPAIErrorReport_DebugLogger(!empty($report_config['debug']), $debug_log_file);
+$report_sender      = new WPAIErrorReport_ReportSender($log_file_path, $schedule_file_path, $report_config, $debug_logger);
+$handler            = new WPAIErrorReport_ErrorHandler($log_file_path, $report_sender, $debug_logger);
 $handler->register();
+
+$debug_logger->log(
+	'plugin_initialized',
+	array(
+		'log_file_path'      => $log_file_path,
+		'schedule_file_path' => $schedule_file_path,
+		'debug_log_file'     => $debug_log_file,
+	)
+);

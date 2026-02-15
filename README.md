@@ -20,3 +20,8 @@ WordPress で発生した Fatal 系エラーを検知し、AI で要約してメ
 
 - 本プラグインは PoC（概念実証）版です。
 - 詳細仕様・動作条件は `.docs/wp-ai-error-report-spec.md` を参照してください。
+
+## デバッグ
+
+- `config.php` の `debug` を `true` にすると、処理ステップをデバッグログへ出力します。
+- `debug_log_file` が空文字の場合、デフォルトで `wp-content/uploads/wp-ai-error-report/logs/debug.log` に出力します。

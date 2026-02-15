@@ -7,15 +7,17 @@ if (!defined('ABSPATH')) {
 class WPAIErrorReport_ReportSender {
 	private $log_file_path;
 	private $schedule_file_path;
+	private $debug_logger;
 	private $api_key;
 	private $recipients;
 	private $model;
 	private $large_log_threshold_bytes;
 	private $max_lines;
 
-	public function __construct($log_file_path, $schedule_file_path, $config) {
+	public function __construct($log_file_path, $schedule_file_path, $config, $debug_logger = null) {
 		$this->log_file_path              = $log_file_path;
 		$this->schedule_file_path         = $schedule_file_path;
+		$this->debug_logger               = $debug_logger;
 		$this->api_key                    = isset($config['api_key']) ? (string) $config['api_key'] : '';
 		$this->recipients                 = $this->parse_recipients(isset($config['notification_emails']) ? $config['notification_emails'] : '');
 		$this->model                      = isset($config['model']) && $config['model'] ? (string) $config['model'] : 'gpt-4.1-mini';
@@ -25,55 +27,78 @@ class WPAIErrorReport_ReportSender {
 
 	public function should_send_report() {
 		if (!file_exists($this->log_file_path)) {
+			$this->debug('should_send_report_false_no_log');
 			return false;
 		}
 
 		if (!file_exists($this->schedule_file_path)) {
+			$this->debug('should_send_report_true_no_schedule');
 			return true;
 		}
 
 		$mtime = filemtime($this->schedule_file_path);
 		if (!$mtime) {
+			$this->debug('should_send_report_true_schedule_mtime_failed');
 			return true;
 		}
 
-		return (time() - $mtime) >= HOUR_IN_SECONDS;
+		$is_due = (time() - $mtime) >= HOUR_IN_SECONDS;
+		$this->debug(
+			$is_due ? 'should_send_report_true_due' : 'should_send_report_false_cooldown',
+			array('schedule_file_mtime' => $mtime)
+		);
+		return $is_due;
 	}
 
 	public function send_report_if_due() {
 		if (!$this->should_send_report()) {
+			$this->debug('send_report_if_due_skipped');
 			return false;
 		}
 
 		$this->touch_schedule_file();
+		$this->debug('send_report_if_due_attempt_started');
 		return $this->send_report();
 	}
 
 	public function send_report() {
 		if (empty($this->recipients)) {
 			error_log('WP AI Error Report: notification_emails are empty. Skip sending.');
+			$this->debug('send_report_skipped_no_recipients');
 			return false;
 		}
 
 		if ($this->api_key === '') {
 			error_log('WP AI Error Report: API key is empty. Skip sending.');
+			$this->debug('send_report_skipped_no_api_key');
 			return false;
 		}
 
 		$report_data = $this->read_log_excerpt();
 		if ($report_data === false) {
 			error_log('WP AI Error Report: failed to read log file.');
+			$this->debug('send_report_failed_read_log');
 			return false;
 		}
+		$this->debug(
+			'send_report_log_loaded',
+			array(
+				'line_count' => count($report_data['lines']),
+				'is_large'   => $report_data['is_large'],
+				'file_size'  => $report_data['file_size'],
+			)
+		);
 
 		$summary = $this->request_summary($report_data);
 		if ($summary === false) {
 			error_log('WP AI Error Report: OpenAI request failed.');
+			$this->debug('send_report_failed_openai');
 			return false;
 		}
 
 		if (!$this->send_email($summary)) {
 			error_log('WP AI Error Report: wp_mail failed.');
+			$this->debug('send_report_failed_mail');
 			return false;
 		}
 
@@ -83,6 +108,7 @@ class WPAIErrorReport_ReportSender {
 		if (file_exists($this->schedule_file_path) && !@unlink($this->schedule_file_path)) {
 			error_log('WP AI Error Report: report sent, but failed to delete schedule marker.');
 		}
+		$this->debug('send_report_succeeded');
 
 		return true;
 	}
@@ -101,21 +127,29 @@ class WPAIErrorReport_ReportSender {
 			wp_mkdir_p($dir);
 		}
 
-		return @touch($this->schedule_file_path);
+		$result = @touch($this->schedule_file_path);
+		$this->debug(
+			$result ? 'touch_schedule_file_succeeded' : 'touch_schedule_file_failed',
+			array('schedule_file_path' => $this->schedule_file_path)
+		);
+		return $result;
 	}
 
 	private function read_log_excerpt() {
 		if (!is_readable($this->log_file_path)) {
+			$this->debug('read_log_excerpt_failed_not_readable');
 			return false;
 		}
 
 		$file_size = filesize($this->log_file_path);
 		if ($file_size === false) {
+			$this->debug('read_log_excerpt_failed_filesize');
 			return false;
 		}
 
 		$lines = $this->tail_lines($this->log_file_path, $this->max_lines);
 		if ($lines === false) {
+			$this->debug('read_log_excerpt_failed_tail');
 			return false;
 		}
 
@@ -170,6 +204,7 @@ class WPAIErrorReport_ReportSender {
 
 		if (is_wp_error($response)) {
 			error_log('WP AI Error Report: ' . $response->get_error_message());
+			$this->debug('openai_request_wp_error', array('message' => $response->get_error_message()));
 			return false;
 		}
 
@@ -177,24 +212,30 @@ class WPAIErrorReport_ReportSender {
 		$body   = (string) wp_remote_retrieve_body($response);
 		if ($status < 200 || $status >= 300) {
 			error_log('WP AI Error Report: OpenAI HTTP error ' . $status . ' body=' . $body);
+			$this->debug('openai_request_http_error', array('status' => $status));
 			return false;
 		}
+		$this->debug('openai_request_http_ok', array('status' => $status));
 
 		$data = json_decode($body, true);
 		if (!is_array($data)) {
+			$this->debug('openai_response_decode_failed');
 			return false;
 		}
 
 		$text = $this->extract_output_text($data);
 		if ($text === '') {
+			$this->debug('openai_response_text_empty');
 			return false;
 		}
+		$this->debug('openai_response_text_ok', array('length' => strlen($text)));
 
 		return $text;
 	}
 
 	private function send_email($summary) {
 		$subject = sprintf('[WordPress] エラーレポート - %s', get_bloginfo('name'));
+		$this->debug('mail_send_attempt', array('recipients' => count($this->recipients)));
 		return wp_mail($this->recipients, $subject, $summary);
 	}
 
@@ -292,5 +333,11 @@ class WPAIErrorReport_ReportSender {
 		}
 
 		return $number;
+	}
+
+	private function debug($event, $context = array()) {
+		if ($this->debug_logger instanceof WPAIErrorReport_DebugLogger) {
+			$this->debug_logger->log($event, $context);
+		}
 	}
 }
