@@ -8,6 +8,4 @@ return array(
 	'model'               => 'gpt-4.1-mini',
 	'large_log_threshold' => '1MB',
 	'max_lines'           => 100,
-	'debug'               => false,
-	'debug_log_file'      => '',
 );

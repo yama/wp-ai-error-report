@@ -106,8 +106,6 @@ wp-content/uploads/wp-ai-error-report/logs/
   - `model`（デフォルト: `gpt-4.1-mini`）
   - `large_log_threshold`（`KB` / `MB` 指定）
   - `max_lines`（通常時/巨大ログ時共通）
-  - `debug`（`true` の場合は診断ログを出力）
-  - `debug_log_file`（任意。空の場合は既定の `uploads` 配下）
 
 ### 6.2 設計方針
 

@@ -98,8 +98,6 @@
 - `model`（デフォルト `gpt-4.1-mini`）
 - `large_log_threshold`（文字列例: `1MB` / `512KB`）
 - `max_lines`（通常時/巨大ログ時共通。初期値 `100`）
-- `debug`（有効時に診断ログを出力）
-- `debug_log_file`（空の場合は `uploads` 配下既定値）
 
 2. Fatal捕捉・JSONログ追記を実装する。
 - Files:
@@ -226,3 +224,4 @@
 - 2026-02-14T17:05:00Z 判定ファイル名を `last_report_attempt.touch` から `last_report_attempted_at.touch` へ変更し、実装・仕様書・ExecPlanの表記を統一。
 - 2026-02-15T04:41:46Z リポジトリ配下の `wp-ai-error-report/` ディレクトリを廃止し、プラグイン構成をリポジトリ直下（`wp-ai-error-report.php`, `includes/`, `config*.php`）へ移設。
 - 2026-02-15T05:26:42Z `debug` 設定を追加。有効時に `debug.log` へ処理ステップ（判定/送信/API/メール失敗点）を出力できるように実装。
+- 2026-02-15T05:47:55Z コードベース簡素化のためデバッグログ機構を撤去し、通常運用の最小構成へ戻した。
