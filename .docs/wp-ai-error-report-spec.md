@@ -8,6 +8,7 @@
 - 対象プロダクト: WordPress プラグイン `wp-ai-error-report`
 - フェーズ: 実験導入（PoC）
 - 作成日: 2026-02-14
+- 更新日: 2026-02-14
 
 ## 2. 目的
 
@@ -53,14 +54,17 @@ WordPress サイトで発生した致命的エラー（Fatal Error）を検知�
 ```text
 wp-content/plugins/wp-ai-error-report/
  ├ wp-ai-error-report.php      # メインエントリーポイント（プラグイン登録と初期化のみ）
- ├ config.php                   # APIキー設定（VCS管理対象外）
+ ├ config.php                   # 設定ファイル（VCS管理対象外）
+ ├ config.example.php           # 設定サンプル（VCS管理対象）
  ├ .gitignore                   # config.phpを除外
  ├ includes/
  │   ├ class-error-handler.php  # エラー捕捉・ログ記録クラス
  │   ├ class-report-sender.php  # レポート処理・AI連携・メール送信クラス
  │   └ class-masking.php        # マスキング処理クラス
- └ logs/
-      └ error.log               # 一時ログファイル
+
+wp-content/uploads/wp-ai-error-report/logs/
+ ├ error.log                    # 一時ログファイル
+ └ last_report_attempted_at.touch    # 送信間隔判定用タイムスタンプファイル
 ```
 
 ### 6.1 各ファイルの責務
@@ -95,8 +99,13 @@ wp-content/plugins/wp-ai-error-report/
 
 **config.php**
 
-- APIキーの定義のみ
-- 定数で管理（例：`define('WP_AI_ERROR_REPORT_API_KEY', 'sk-...');`）
+- 定数ベースで設定を定義
+- 初期実装で扱う項目:
+  - `WP_AI_ERROR_REPORT_API_KEY`
+  - `WP_AI_ERROR_REPORT_RECIPIENTS`（カンマ区切りで複数可）
+  - `WP_AI_ERROR_REPORT_MODEL`（デフォルト: `gpt-4.1-mini`）
+  - `WP_AI_ERROR_REPORT_LARGE_LOG_THRESHOLD`（`KB` / `MB` 指定）
+  - `WP_AI_ERROR_REPORT_MAX_LINES`（通常時/巨大ログ時共通）
 
 ### 6.2 設計方針
 
@@ -105,7 +114,7 @@ wp-content/plugins/wp-ai-error-report/
 - **テスト容易性**: クラス分割により単体テストが可能
 - **将来拡張性**: AI連携部分が独立しているため、差し替えが容易
 
-※ セキュリティ上、`logs/` ディレクトリを `wp-content/uploads/wp-ai-error-report/logs/` に配置することも検討可能。
+※ セキュリティ上、`logs/` ディレクトリは `wp-content/uploads/wp-ai-error-report/logs/` に配置する。
 
 ## 7. 機能要件
 
@@ -115,8 +124,9 @@ wp-content/plugins/wp-ai-error-report/
 
 #### 7.1.1 サイトにリクエストがあった時
 
-1. `error.log` の存在とタイムスタンプ（`filemtime`）を確認
-2. ファイルが存在し、かつタイムスタンプが1時間以上前の場合 → **7.3 レポート処理**へ進む
+1. `error.log` の存在を確認
+2. `last_report_attempted_at.touch` のタイムスタンプ（`filemtime`）を確認
+3. `last_report_attempted_at.touch` が存在しない場合、またはタイムスタンプが1時間以上前の場合 → **7.3 レポート処理**へ進む
 3. それ以外の場合 → 何もしない
 
 #### 7.1.2 エラーが発生した時
@@ -127,29 +137,31 @@ wp-content/plugins/wp-ai-error-report/
    - `E_PARSE`
    - `E_CORE_ERROR`
 3. 捕捉したエラーはマスキング実施後に `logs/error.log` へ追記
-4. `error.log` のタイムスタンプ（`filemtime`）を確認
-5. タイムスタンプが1時間以上前の場合 → **7.3 レポート処理**へ進む
+4. `last_report_attempted_at.touch` のタイムスタンプ（`filemtime`）を確認
+5. `last_report_attempted_at.touch` が存在しない場合、またはタイムスタンプが1時間以上前の場合 → **7.3 レポート処理**へ進む
 6. それ以外の場合 → エラーログ追記のみで終了
 
 ### 7.2 送信判定
 
-- `error.log` の `filemtime` でレポート処理の実行判定を行う
+- 送信間隔判定は `last_report_attempted_at.touch` の `filemtime` で行う
 - 判定条件:
   - `error.log` が存在しない → レポート処理不要
-  - `error.log` のタイムスタンプが1時間未満 → レポート処理しない（頻繁すぎる送信を抑制）
-  - `error.log` のタイムスタンプが1時間以上前 → レポート処理を実行
+  - `last_report_attempted_at.touch` が存在しない → レポート処理を実行（初回送信）
+  - `last_report_attempted_at.touch` のタイムスタンプが1時間未満 → レポート処理しない（頻繁すぎる送信を抑制）
+  - `last_report_attempted_at.touch` のタイムスタンプが1時間以上前 → レポート処理を実行
+- 送信を試行した時点で `last_report_attempted_at.touch` を更新する（成功/失敗を問わず）
 - 厳密な1時間単位でなくてもよい（頻繁すぎる送信の抑制が主目的）
 
 ### 7.3 レポート処理（AI解析・要約送信）
 
 1. `error.log` のファイルサイズを確認
-   - 通常サイズ（目安：1MB未満）の場合 → 末尾最大 300 行を取得
+   - 通常サイズ（目安：1MB未満）の場合 → 末尾最大 100 行を取得
    - 大きなサイズ（目安：1MB以上）の場合 → 末尾最大 100 行のみ取得し、ファイルサイズ情報を記録
 2. OpenAI API に送信（大量アタック時はファイルサイズ情報も含める）
 3. 非エンジニア向け要約を生成
    - 大量ログ時は「xxMBにも及ぶ大きなログが生成されていて、何かが起きている」旨を明記
-4. メール送信（WordPress管理者メールアドレス宛）
-5. `error.log` を削除
+4. メール送信（`config.php` の `WP_AI_ERROR_REPORT_RECIPIENTS` 宛。空の場合は送信しない）
+5. 送信成功時のみ `error.log` と `last_report_attempted_at.touch` を削除
 
 ### 7.4 通知内容
 
@@ -166,7 +178,7 @@ wp-content/plugins/wp-ai-error-report/
 - 形式: 1行1エラー（**JSON形式に統一**。AIとの相性・後処理のしやすさを重視）
 - 書き込み: 追記方式
 - AI送信対象:
-  - 通常時: 末尾最大 300 行
+  - 通常時: 末尾最大 100 行
   - ログファイルが大きい場合（目安：1MB以上）: 末尾最大 100 行のみ（割り切った処理）
 
 推奨フィールド:
@@ -178,7 +190,7 @@ wp-content/plugins/wp-ai-error-report/
 - `line`
 - `site_url`
 
-※ `error.log` は一時的なログファイルとし、レポート送信後は削除する。`error.log` のタイムスタンプ（`filemtime`）でレポート処理の実行判定を行うため、専用のタイムスタンプファイルは不要。恒久的なログ管理が必要な場合はWordPress本体のログ機構（`WP_DEBUG_LOG` など）を利用することを推奨。
+※ `error.log` は一時的なログファイルとし、レポート送信成功後は削除する。送信間隔判定は `last_report_attempted_at.touch` で行う。恒久的なログ管理が必要な場合はWordPress本体のログ機構（`WP_DEBUG_LOG` など）を利用することを推奨。
 
 ※ 大量アタック等でログが肥大化した場合（秒間数十件などの猛烈なエラー）は、全件を分析せず末尾100行のみを対象とし、ファイルサイズが大きい旨を要約に含める割り切った処理とする。
 
@@ -210,7 +222,7 @@ wp-content/plugins/wp-ai-error-report/
 
 - APIキーは `config.php` に保持（**VCS管理対象外必須**。`.gitignore` に追加）
 - `config.php` は直接アクセス不可設定（PHPファイル冒頭で `defined('ABSPATH') or die();` を記述）
-- `logs/` ディレクトリはプラグインディレクトリ外の推奨（例：`wp-content/uploads/wp-ai-error-report/logs/`）、もしくは `.htaccess`（Apache）や適切なパーミッション設定で外部アクセス遮断
+- `logs/` ディレクトリはプラグインディレクトリ外（`wp-content/uploads/wp-ai-error-report/logs/`）に配置し、`.htaccess`（Apache）や適切なパーミッション設定で外部アクセス遮断
 - エラーメッセージ送信前に必ずマスキング処理を通す
 
 ## 11. 非機能要件
@@ -218,7 +230,7 @@ wp-content/plugins/wp-ai-error-report/
 - 可用性: エラー多発時も送信間隔制限で外部API呼び出しを抑制
 - 保守性: AI連携部を抽象化して将来差し替え可能にする
 - 性能:
-  - 通常時: 送信対象を 300 行上限にして処理量とトークン量を制限
+  - 通常時: 送信対象を 100 行上限にして処理量とトークン量を制限
   - ログ肥大化時（1MB以上）: 送信対象を 100 行に制限し、過負荷を回避
 
 ## 12. 異常系/失敗時の挙動
@@ -227,17 +239,20 @@ wp-content/plugins/wp-ai-error-report/
 
 - メール送信は行わない
 - `error.log` は保持（次回リクエスト時に再試行）
+- `last_report_attempted_at.touch` は更新し、最低1時間の再試行間隔を維持する
 - 処理を静かに終了（エラー自体は WordPress のデバッグログに記録）
 
 **メール送信失敗時**:
 
 - `error.log` は保持（次回リクエスト時に再試行）
+- `last_report_attempted_at.touch` は更新し、最低1時間の再試行間隔を維持する
 - 失敗情報は WordPress のデバッグログに記録
 - PoC段階では専用の失敗ログ機構は実装せず、既存のWordPress機能を活用
 
 **ログファイル読み取り失敗時**:
 
 - 処理をスキップし、次回リクエスト時に再試行
+- `last_report_attempted_at.touch` は更新し、最低1時間の再試行間隔を維持する
 - エラー情報は WordPress のデバッグログに記録
 
 ※ PoCでは複雑なエラーハンドリングを避け、「保持して次回再試行」というシンプルな戦略を採用。
@@ -255,12 +270,12 @@ wp-content/plugins/wp-ai-error-report/
 ## 14. 受け入れ基準（PoC）
 
 - Fatal系エラーが `error.log` へ1行1エラーのJSON形式で追記される
-- `error.log` のタイムスタンプで1時間間隔の判定が行われる（厳密な1時間単位でなくてよい）
+- `last_report_attempted_at.touch` のタイムスタンプで1時間間隔の判定が行われる（厳密な1時間単位でなくてよい）
 - 頻繁すぎるメール送信が抑制される
-- 通常時は最大300行、ログ肥大化時（1MB以上）は最大100行がAI解析・要約送信対象になる
+- 通常時/ログ肥大化時ともに最大100行がAI解析・要約送信対象になる
 - ログ肥大化時は、ファイルサイズ情報が要約メールに含まれる
-- 要約メールがWordPress管理者メールアドレス宛に届く
-- レポート送信後に `error.log` が削除される
+- 要約メールが `config.php` の宛先メールアドレス宛に届く（空の場合は送信スキップ）
+- レポート送信成功後に `error.log` と `last_report_attempted_at.touch` が削除される
 - マスキング対象データが外部送信されない
 
 ## 15. 実装仕様の確定事項
@@ -268,11 +283,27 @@ wp-content/plugins/wp-ai-error-report/
 **確定**：
 
 - `error.log` はレポート送信成功後に**削除**する（空ファイル化ではなく削除。シンプルさ優先）
+- 判定専用 `last_report_attempted_at.touch` を使用し、送信試行時（成功/失敗問わず）に更新する
 - メール件名：`[WordPress] エラーレポート - {サイト名}`
 - メール本文：AIによる要約結果を平文で送信（HTML不要。シンプルさ優先）
-- API失敗時の再送戦略：特別な処理なし。次回リクエスト時に自然に再試行される（1時間間隔の判定によって）
+- API失敗時の再送戦略：特別な処理なし。次回リクエスト時に自然に再試行される（最低1時間間隔の判定によって）
+- ログファイル保存先：`wp-content/uploads/wp-ai-error-report/logs/`
+- 送信対象行数：通常時/巨大ログ時ともに最大100行
 
 **未確定（実装時に決定）**：
 
-- ログファイル保存先（プラグインディレクトリ内 or wp-content/uploads内）
 - AIプロンプトの詳細内容
+
+### 15.1 現行実装の初版プロンプト（記録）
+
+以下は 2026-02-14 時点の実装で使用している初版プロンプトであり、今後調整対象とする。
+
+- System prompt:
+  - `あなたはWordPress運用アシスタントです。非エンジニアにも理解できる平易な日本語で要約してください。`
+- User prompt（構造）:
+  - 「以下はWordPressのFatal系エラーログです。」
+  - 「非エンジニア向けに、何が起きているか・想定原因・最初に確認すべきことを簡潔に日本語で説明してください。」
+  - 「箇条書きで出力し、機密情報は推測で補わないでください。」
+  - 「対象ログ行数: {max_lines}」
+  - 巨大ログ時のみ: 「ログファイルは大きなサイズです（約 {xx.xx} MB）。その旨を要約に含めてください。」
+  - `---- LOG START ----` と `---- LOG END ----` で囲んだログ本文
