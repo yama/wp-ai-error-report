@@ -99,13 +99,13 @@ wp-content/uploads/wp-ai-error-report/logs/
 
 **config.php**
 
-- 定数ベースで設定を定義
+- 配列（`return [...]`）で設定を定義
 - 初期実装で扱う項目:
-  - `WP_AI_ERROR_REPORT_API_KEY`
-  - `WP_AI_ERROR_REPORT_RECIPIENTS`（カンマ区切りで複数可）
-  - `WP_AI_ERROR_REPORT_MODEL`（デフォルト: `gpt-4.1-mini`）
-  - `WP_AI_ERROR_REPORT_LARGE_LOG_THRESHOLD`（`KB` / `MB` 指定）
-  - `WP_AI_ERROR_REPORT_MAX_LINES`（通常時/巨大ログ時共通）
+  - `api_key`
+  - `notification_emails`（カンマ区切りで複数可）
+  - `model`（デフォルト: `gpt-4.1-mini`）
+  - `large_log_threshold`（`KB` / `MB` 指定）
+  - `max_lines`（通常時/巨大ログ時共通）
 
 ### 6.2 設計方針
 
@@ -160,7 +160,7 @@ wp-content/uploads/wp-ai-error-report/logs/
 2. OpenAI API に送信（大量アタック時はファイルサイズ情報も含める）
 3. 非エンジニア向け要約を生成
    - 大量ログ時は「xxMBにも及ぶ大きなログが生成されていて、何かが起きている」旨を明記
-4. メール送信（`config.php` の `WP_AI_ERROR_REPORT_RECIPIENTS` 宛。空の場合は送信しない）
+4. メール送信（`config.php` の `notification_emails` 宛。空の場合は送信しない）
 5. 送信成功時のみ `error.log` と `last_report_attempted_at.touch` を削除
 
 ### 7.4 通知内容

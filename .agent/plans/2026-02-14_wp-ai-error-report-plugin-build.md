@@ -9,10 +9,10 @@
 
 ## Progress
 
-- [ ] 実装対象ファイルの雛形を作成する（メイン、includes、config sample、logs ディレクトリ保護）
-- [ ] Fatalエラー捕捉とJSONログ追記処理を実装する
-- [ ] AI要約送信処理（送信判定・OpenAI呼び出し・メール送信・ログ削除）を実装する
-- [ ] 失敗時再試行と例外時の安全終了（WPデバッグログ記録）を実装する
+- [x] 実装対象ファイルの雛形を作成する（メイン、includes、config sample、logs ディレクトリ保護）
+- [x] Fatalエラー捕捉とJSONログ追記処理を実装する
+- [x] AI要約送信処理（送信判定・OpenAI呼び出し・メール送信・ログ削除）を実装する
+- [x] 失敗時再試行と例外時の安全終了（WPデバッグログ記録）を実装する
 - [ ] 構文チェックと動作確認手順を実行し、証跡を残す
 
 ## Findings / Context
@@ -52,6 +52,14 @@
 - Rationale: ユーザー指定（まずは小さめ）を優先し、API負荷を低く抑えるため。
 - Date (UTC): 2026-02-14
 
+- Decision: 1時間間隔判定は `error.log` の `filemtime` ではなく、判定専用 `last_report_attempted_at.touch` の `filemtime` を使用する。
+- Rationale: エラーログ追記で `error.log` の更新時刻が進み続けるため、送信タイミング判定が成立しない問題を回避するため。
+- Date (UTC): 2026-02-14
+
+- Decision: AIプロンプトは現行実装の初版文面を仕様として記録し、将来調整可能な前提で運用する。
+- Rationale: 重要な運用ロジックのブラックボックス化を防ぎ、レビュー可能な状態を維持するため。
+- Date (UTC): 2026-02-14
+
 ## Risks and Mitigations
 
 - Risk: `uploads` 配下ログへの直接アクセスリスク。
@@ -59,7 +67,7 @@
 - Owner: 実装担当
 
 - Risk: エラー多発時に外部APIコストが増える。
-- Mitigation: `filemtime` による1時間間隔判定を厳守し、送信対象行数を100行に固定する。
+- Mitigation: `last_report_attempted_at.touch` の `filemtime` による1時間間隔判定を厳守し、送信対象行数を100行に固定する。
 - Owner: 実装担当
 
 - Risk: マスキング漏れで機密情報が外部送信される。
@@ -81,16 +89,15 @@
 - `wp-ai-error-report/includes/class-error-handler.php`
 - `wp-ai-error-report/includes/class-report-sender.php`
 - `wp-ai-error-report/includes/class-masking.php`
-- `wp-ai-error-report/logs/index.php`（フォールバック用）
 - Interface impact: 新規プラグインが追加され、`init` フックで定期判定処理が有効化される。
 - Notes:
 - `config.php` は `defined('ABSPATH') || exit;` を必須にする。
-- `config.php` 定義項目（初版）:
-- `WP_AI_ERROR_REPORT_API_KEY`
-- `WP_AI_ERROR_REPORT_RECIPIENTS`（カンマ区切り）
-- `WP_AI_ERROR_REPORT_MODEL`（デフォルト `gpt-4.1-mini`）
-- `WP_AI_ERROR_REPORT_LARGE_LOG_THRESHOLD`（文字列例: `1MB` / `512KB`）
-- `WP_AI_ERROR_REPORT_MAX_LINES`（通常時/巨大ログ時共通。初期値 `100`）
+- `config.php` 設定項目（初版）:
+- `api_key`
+- `notification_emails`（カンマ区切り）
+- `model`（デフォルト `gpt-4.1-mini`）
+- `large_log_threshold`（文字列例: `1MB` / `512KB`）
+- `max_lines`（通常時/巨大ログ時共通。初期値 `100`）
 
 2. Fatal捕捉・JSONログ追記を実装する。
 - Files:
@@ -108,12 +115,13 @@
 - `wp-ai-error-report/includes/class-error-handler.php`
 - Interface impact: `init` 時およびエラー発生時の判定で、1時間以上経過したログのみAI解析対象になる。
 - Notes:
-- 判定は `error.log` の `filemtime` を使用する。
+- 判定は `last_report_attempted_at.touch` の `filemtime` を使用する。
+- `last_report_attempted_at.touch` が存在しない場合は送信可能として扱い、送信試行時（成功/失敗問わず）に `touch` 更新する。
 - ログ読み取り時は末尾最大 `WP_AI_ERROR_REPORT_MAX_LINES` 行を取得する。
 - 巨大ログ判定は `WP_AI_ERROR_REPORT_LARGE_LOG_THRESHOLD` をバイト換算して実施する。
 - 巨大ログ時は要約本文にファイルサイズ情報を必ず含める。
 - OpenAI API失敗時/メール失敗時/読み取り失敗時はいずれも `error.log` を保持する。
-- 成功時のみ `error.log` を削除する。
+- 成功時のみ `error.log` と `last_report_attempted_at.touch` を削除する。
 
 4. OpenAI通信・通知本文生成・送信を実装する。
 - Files:
@@ -142,7 +150,7 @@
 - OpenAI: `POST /v1/responses`
 - Data contracts:
 - `error.log` は JSON Lines（1行1JSON）
-- `config.php` は定数定義ベース
+- `config.php` は `return` 配列ベース
 - External services:
 - OpenAI API（APIキー必須）
 - SMTP/メール送信経路（`wp_mail` が利用する環境）
@@ -153,6 +161,9 @@
 - 管理画面UIがないため nonce は不要。
 - 外部入力を受けるUIがないため `current_user_can` チェックも不要（将来UI追加時に導入）。
 - ログ・設定値の取り扱い時は `sanitize_text_field`, `sanitize_email`, `esc_html` 等を利用箇所で適用する。
+- Prompt contract (current implementation):
+- System: `あなたはWordPress運用アシスタントです。非エンジニアにも理解できる平易な日本語で要約してください。`
+- User: Fatalログ説明、要約観点（何が起きているか/想定原因/最初の確認事項）、箇条書き指定、機密情報推測禁止、対象行数、巨大ログ時のサイズ明記指示、`LOG START/END` で囲んだ本文。
 
 ## Validation
 
@@ -180,9 +191,17 @@
 - Expected result: 1行1JSONで追記され、マスキング済み項目が保存される
 - Evidence location: `wp-content/uploads/wp-ai-error-report/logs/error.log`
 
-- Command: （手動）`filemtime` を1時間以上前にしたログでページアクセス
+- Command: （手動）`last_report_attempted_at.touch` の `filemtime` を1時間以上前にしてページアクセス
 - Expected result: OpenAI要約処理とメール送信が試行され、成功時に `error.log` が削除される
-- Evidence location: メール受信記録、ログファイル消失確認、WPデバッグログ
+- Evidence location: メール受信記録、`error.log` / `last_report_attempted_at.touch` 消失確認、WPデバッグログ
+
+- Command: （手動）`last_report_attempted_at.touch` を現在時刻に更新した直後に再アクセス
+- Expected result: 1時間未満のため再送されない（外部API呼び出し・追加メール送信なし）
+- Evidence location: メール受信記録、WPデバッグログ、`last_report_attempted_at.touch` の時刻
+
+- Command: （手動）OpenAI APIキーを無効値にして送信試行
+- Expected result: 送信失敗時も `error.log` は保持され、`last_report_attempted_at.touch` は更新される
+- Evidence location: `error.log` 残存確認、`last_report_attempted_at.touch` 更新時刻、WPデバッグログ
 
 ## Rollback / Recovery
 
@@ -190,10 +209,16 @@
 - Rollback steps:
 1. プラグインを無効化する。
 2. `wp-ai-error-report` ディレクトリを退避または削除する。
-3. `wp-content/uploads/wp-ai-error-report/logs/error.log` を保全し、必要に応じて削除する。
+3. `wp-content/uploads/wp-ai-error-report/logs/error.log` と `last_report_attempted_at.touch` を保全し、必要に応じて削除する。
 4. `config.php` からAPIキーと宛先設定を無効化する。
 - Data recovery notes: `error.log` は一時ファイル運用のため、復旧時は破棄可能。必要なら解析用に別途バックアップして再投入しない。
 
 ## Execution Notes (Living Updates)
 
 - 2026-02-14T15:05:00Z 初版ExecPlan作成。未確定事項のうち、ログ保存先はセキュリティ推奨に従い `uploads` 配下を採用。
+- 2026-02-14T16:29:49Z プラグイン初版を実装。`wp_remote_post` による OpenAI連携、JSON Linesログ、1時間判定、送信成功時ログ削除、未設定宛先スキップを反映。
+- 2026-02-14T16:29:49Z `php -l` による主要PHPファイルの構文チェックは実施済み。WP-CLI実行と手動のFatal再現確認は実環境依存のため未実施。
+- 2026-02-14T16:33:18Z 送信間隔判定を `error.log` 依存から `last_report_attempted_at.touch` 依存へ変更。ログ追記で判定不能になる問題を解消。
+- 2026-02-14T16:46:52Z プラグイン配下 `logs` を廃止し、`uploads` 側のみを実ログ保存先として明確化。検証手順に再送抑止と失敗時保持を追加。
+- 2026-02-14T16:46:52Z `last_report_attempted_at.touch` 未作成時は即時送信可とするよう実装を同期（判定ファイル作成をエラー追記時ではなく送信試行時に限定）。
+- 2026-02-14T17:05:00Z 判定ファイル名を `last_report_attempt.touch` から `last_report_attempted_at.touch` へ変更し、実装・仕様書・ExecPlanの表記を統一。
