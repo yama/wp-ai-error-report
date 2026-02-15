@@ -15,10 +15,18 @@ require_once __DIR__ . '/includes/class-report-sender.php';
 require_once __DIR__ . '/includes/class-error-handler.php';
 require_once __DIR__ . '/includes/plugin-functions.php';
 
-$report_config = wp_ai_error_report_load_config();
+$plugin_config = wp_ai_error_report_load_config();
 
-$log_file_path      = wp_ai_error_report_upload_log_path();
-$schedule_file_path = dirname($log_file_path) . '/last_report_attempted_at.touch';
-$report_sender      = new WPAIErrorReport_ReportSender($log_file_path, $schedule_file_path, $report_config);
-$handler            = new WPAIErrorReport_ErrorHandler($log_file_path, $report_sender);
-$handler->register();
+$error_log_path = wp_ai_error_report_upload_log_path();
+
+$report_sender_service = new WPAIErrorReport_ReportSender(
+	$error_log_path,
+	dirname($error_log_path) . '/last_report_attempted_at.touch',
+	$plugin_config
+);
+
+$fatal_error_handler = new WPAIErrorReport_ErrorHandler(
+    $error_log_path, $report_sender_service
+);
+
+$fatal_error_handler->register();
