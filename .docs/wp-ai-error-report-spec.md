@@ -106,6 +106,7 @@ wp-content/uploads/wp-ai-error-report/logs/
   - `model`（デフォルト: `gpt-4.1-mini`）
   - `large_log_threshold`（`KB` / `MB` 指定）
   - `max_lines`（通常時/巨大ログ時共通）
+  - `send_interval_minutes`（送信間隔（分）。デフォルト `60`、例: `60 * 3`）
 
 ### 6.2 設計方針
 
@@ -126,7 +127,7 @@ wp-content/uploads/wp-ai-error-report/logs/
 
 1. `error.log` の存在を確認
 2. `last_report_attempted_at.touch` のタイムスタンプ（`filemtime`）を確認
-3. `last_report_attempted_at.touch` が存在しない場合、またはタイムスタンプが1時間以上前の場合 → **7.3 レポート処理**へ進む
+3. `last_report_attempted_at.touch` が存在しない場合、またはタイムスタンプが送信間隔以上前の場合 → **7.3 レポート処理**へ進む
 3. それ以外の場合 → 何もしない
 
 #### 7.1.2 エラーが発生した時
@@ -138,7 +139,7 @@ wp-content/uploads/wp-ai-error-report/logs/
    - `E_CORE_ERROR`
 3. 捕捉したエラーはマスキング実施後に `logs/error.log` へ追記
 4. `last_report_attempted_at.touch` のタイムスタンプ（`filemtime`）を確認
-5. `last_report_attempted_at.touch` が存在しない場合、またはタイムスタンプが1時間以上前の場合 → **7.3 レポート処理**へ進む
+5. `last_report_attempted_at.touch` が存在しない場合、またはタイムスタンプが送信間隔以上前の場合 → **7.3 レポート処理**へ進む
 6. それ以外の場合 → エラーログ追記のみで終了
 
 ### 7.2 送信判定
@@ -147,10 +148,10 @@ wp-content/uploads/wp-ai-error-report/logs/
 - 判定条件:
   - `error.log` が存在しない → レポート処理不要
   - `last_report_attempted_at.touch` が存在しない → レポート処理を実行（初回送信）
-  - `last_report_attempted_at.touch` のタイムスタンプが1時間未満 → レポート処理しない（頻繁すぎる送信を抑制）
-  - `last_report_attempted_at.touch` のタイムスタンプが1時間以上前 → レポート処理を実行
+  - `last_report_attempted_at.touch` のタイムスタンプが `send_interval_minutes` 未満（分換算） → レポート処理しない（頻繁すぎる送信を抑制）
+  - `last_report_attempted_at.touch` のタイムスタンプが `send_interval_minutes` 以上（分換算） → レポート処理を実行
 - 送信を試行した時点で `last_report_attempted_at.touch` を更新する（成功/失敗を問わず）
-- 厳密な1時間単位でなくてもよい（頻繁すぎる送信の抑制が主目的）
+- 厳密な時刻同期は不要（頻繁すぎる送信の抑制が主目的）
 
 ### 7.3 レポート処理（AI解析・要約送信）
 
@@ -239,20 +240,20 @@ wp-content/uploads/wp-ai-error-report/logs/
 
 - メール送信は行わない
 - `error.log` は保持（次回リクエスト時に再試行）
-- `last_report_attempted_at.touch` は更新し、最低1時間の再試行間隔を維持する
+- `last_report_attempted_at.touch` は更新し、`send_interval_minutes` に基づく再試行間隔を維持する
 - 処理を静かに終了（エラー自体は WordPress のデバッグログに記録）
 
 **メール送信失敗時**:
 
 - `error.log` は保持（次回リクエスト時に再試行）
-- `last_report_attempted_at.touch` は更新し、最低1時間の再試行間隔を維持する
+- `last_report_attempted_at.touch` は更新し、`send_interval_minutes` に基づく再試行間隔を維持する
 - 失敗情報は WordPress のデバッグログに記録
 - PoC段階では専用の失敗ログ機構は実装せず、既存のWordPress機能を活用
 
 **ログファイル読み取り失敗時**:
 
 - 処理をスキップし、次回リクエスト時に再試行
-- `last_report_attempted_at.touch` は更新し、最低1時間の再試行間隔を維持する
+- `last_report_attempted_at.touch` は更新し、`send_interval_minutes` に基づく再試行間隔を維持する
 - エラー情報は WordPress のデバッグログに記録
 
 ※ PoCでは複雑なエラーハンドリングを避け、「保持して次回再試行」というシンプルな戦略を採用。
@@ -270,7 +271,7 @@ wp-content/uploads/wp-ai-error-report/logs/
 ## 14. 受け入れ基準（PoC）
 
 - Fatal系エラーが `error.log` へ1行1エラーのJSON形式で追記される
-- `last_report_attempted_at.touch` のタイムスタンプで1時間間隔の判定が行われる（厳密な1時間単位でなくてよい）
+- `last_report_attempted_at.touch` のタイムスタンプで `send_interval_minutes` 間隔の判定が行われる
 - 頻繁すぎるメール送信が抑制される
 - 通常時/ログ肥大化時ともに最大100行がAI解析・要約送信対象になる
 - ログ肥大化時は、ファイルサイズ情報が要約メールに含まれる
@@ -286,7 +287,7 @@ wp-content/uploads/wp-ai-error-report/logs/
 - 判定専用 `last_report_attempted_at.touch` を使用し、送信試行時（成功/失敗問わず）に更新する
 - メール件名：`[WordPress] エラーレポート - {サイト名}`
 - メール本文：AIによる要約結果を平文で送信（HTML不要。シンプルさ優先）
-- API失敗時の再送戦略：特別な処理なし。次回リクエスト時に自然に再試行される（最低1時間間隔の判定によって）
+- API失敗時の再送戦略：特別な処理なし。次回リクエスト時に自然に再試行される（`send_interval_minutes` の判定によって）
 - ログファイル保存先：`wp-content/uploads/wp-ai-error-report/logs/`
 - 送信対象行数：通常時/巨大ログ時ともに最大100行
 

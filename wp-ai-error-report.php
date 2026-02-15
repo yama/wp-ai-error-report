@@ -21,6 +21,7 @@ function wp_ai_error_report_load_config() {
 		'model'               => 'gpt-4.1-mini',
 		'large_log_threshold' => '1MB',
 		'max_lines'           => 100,
+		'send_interval_minutes' => 60,
 	);
 
 	$config_file = __DIR__ . '/config.php';
@@ -31,11 +32,6 @@ function wp_ai_error_report_load_config() {
 	$config = require $config_file;
 	if (!is_array($config)) {
 		return $defaults;
-	}
-
-	// Backward-compatible alias for old key name.
-	if (!isset($config['notification_emails']) && isset($config['recipients'])) {
-		$config['notification_emails'] = $config['recipients'];
 	}
 
 	return array_merge($defaults, $config);

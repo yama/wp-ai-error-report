@@ -12,6 +12,7 @@ class WPAIErrorReport_ReportSender {
 	private $model;
 	private $large_log_threshold_bytes;
 	private $max_lines;
+	private $send_interval_seconds;
 
 	public function __construct($log_file_path, $schedule_file_path, $config) {
 		$this->log_file_path              = $log_file_path;
@@ -21,6 +22,7 @@ class WPAIErrorReport_ReportSender {
 		$this->model                      = isset($config['model']) && $config['model'] ? (string) $config['model'] : 'gpt-4.1-mini';
 		$this->large_log_threshold_bytes  = $this->parse_size_to_bytes(isset($config['large_log_threshold']) ? $config['large_log_threshold'] : '1MB');
 		$this->max_lines                  = isset($config['max_lines']) ? max(1, (int) $config['max_lines']) : 100;
+		$this->send_interval_seconds      = $this->parse_interval_seconds(isset($config['send_interval_minutes']) ? $config['send_interval_minutes'] : 60);
 	}
 
 	public function should_send_report() {
@@ -37,7 +39,7 @@ class WPAIErrorReport_ReportSender {
 			return true;
 		}
 
-		return (time() - $mtime) >= HOUR_IN_SECONDS;
+		return (time() - $mtime) >= $this->send_interval_seconds;
 	}
 
 	public function send_report_if_due() {
@@ -85,14 +87,6 @@ class WPAIErrorReport_ReportSender {
 		}
 
 		return true;
-	}
-
-	public function ensure_schedule_file_exists() {
-		if (file_exists($this->schedule_file_path)) {
-			return true;
-		}
-
-		return $this->touch_schedule_file();
 	}
 
 	private function touch_schedule_file() {
@@ -293,5 +287,13 @@ class WPAIErrorReport_ReportSender {
 
 		return $number;
 	}
-}
 
+	private function parse_interval_seconds($minutes) {
+		$value = (int) $minutes;
+		if ($value < 1) {
+			$value = 1;
+		}
+
+		return $value * MINUTE_IN_SECONDS;
+	}
+}

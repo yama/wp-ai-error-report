@@ -12,7 +12,8 @@ WordPress で発生した Fatal 系エラーを検知し、AI で要約してメ
 
 1. `config.example.php` を参考に `config.php` を作成
 2. API キーと通知先メールアドレスを設定
-3. プラグインを有効化
+3. 必要に応じて `send_interval_minutes` を設定（例: `60 * 3`）
+4. プラグインを有効化
 
 `config.php` は機密情報を含むため Git 管理対象外です。
 

@@ -4,7 +4,7 @@
 
 - Goal: `.docs/wp-ai-error-report-spec.md` に基づき、PoC向け WordPress プラグイン `wp-ai-error-report` を実装するための具体的な実行計画を定義する。
 - User value: Fatal系エラーの検知からAI要約メール通知までを、過剰通知を抑えながら短期間で導入できる。
-- In scope: プラグイン本体、エラー捕捉、JSONログ保存、マスキング、1時間間隔判定、OpenAI API連携（`wp_remote_post`）、メール送信、失敗時リトライ方針、設定ファイル構成。
+- In scope: プラグイン本体、エラー捕捉、JSONログ保存、マスキング、設定可能な送信間隔判定、OpenAI API連携（`wp_remote_post`）、メール送信、失敗時リトライ方針、設定ファイル構成。
 - Out of scope: 管理画面UI、同一エラー集約、中間サーバー連携、ローカルLLM、高度なローテーションや分析機能。
 
 ## Progress
@@ -98,6 +98,7 @@
 - `model`（デフォルト `gpt-4.1-mini`）
 - `large_log_threshold`（文字列例: `1MB` / `512KB`）
 - `max_lines`（通常時/巨大ログ時共通。初期値 `100`）
+- `send_interval_minutes`（送信間隔（分）。初期値 `60`、例 `60 * 3`）
 
 2. Fatal捕捉・JSONログ追記を実装する。
 - Files:
@@ -113,7 +114,7 @@
 - Files:
 - `includes/class-report-sender.php`
 - `includes/class-error-handler.php`
-- Interface impact: `init` 時およびエラー発生時の判定で、1時間以上経過したログのみAI解析対象になる。
+- Interface impact: `init` 時およびエラー発生時の判定で、`send_interval_minutes` 以上（分換算）経過したログのみAI解析対象になる。
 - Notes:
 - 判定は `last_report_attempted_at.touch` の `filemtime` を使用する。
 - `last_report_attempted_at.touch` が存在しない場合は送信可能として扱い、送信試行時（成功/失敗問わず）に `touch` 更新する。
@@ -225,3 +226,5 @@
 - 2026-02-15T04:41:46Z リポジトリ配下の `wp-ai-error-report/` ディレクトリを廃止し、プラグイン構成をリポジトリ直下（`wp-ai-error-report.php`, `includes/`, `config*.php`）へ移設。
 - 2026-02-15T05:26:42Z `debug` 設定を追加。有効時に `debug.log` へ処理ステップ（判定/送信/API/メール失敗点）を出力できるように実装。
 - 2026-02-15T05:47:55Z コードベース簡素化のためデバッグログ機構を撤去し、通常運用の最小構成へ戻した。
+- 2026-02-15T05:52:47Z 送信間隔設定を `send_interval_minutes`（分指定）へ統一。
+- 2026-02-15T05:52:47Z 送信間隔設定を `send_interval_minutes` に変更（デフォルト60分、例: `60 * 3`）。
