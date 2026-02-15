@@ -82,13 +82,13 @@
 
 1. プラグイン骨格と設定ファイルを作成する。
 - Files:
-- `wp-ai-error-report/wp-ai-error-report.php`
-- `wp-ai-error-report/config.php`（実ファイル、VCS除外）
-- `wp-ai-error-report/config.example.php`（配布用テンプレート）
-- `wp-ai-error-report/.gitignore`
-- `wp-ai-error-report/includes/class-error-handler.php`
-- `wp-ai-error-report/includes/class-report-sender.php`
-- `wp-ai-error-report/includes/class-masking.php`
+- `wp-ai-error-report.php`
+- `config.php`（実ファイル、VCS除外）
+- `config.example.php`（配布用テンプレート）
+- `.gitignore`
+- `includes/class-error-handler.php`
+- `includes/class-report-sender.php`
+- `includes/class-masking.php`
 - Interface impact: 新規プラグインが追加され、`init` フックで定期判定処理が有効化される。
 - Notes:
 - `config.php` は `defined('ABSPATH') || exit;` を必須にする。
@@ -101,8 +101,8 @@
 
 2. Fatal捕捉・JSONログ追記を実装する。
 - Files:
-- `wp-ai-error-report/includes/class-error-handler.php`
-- `wp-ai-error-report/includes/class-masking.php`
+- `includes/class-error-handler.php`
+- `includes/class-masking.php`
 - Interface impact: `register_shutdown_function` により `E_ERROR`, `E_PARSE`, `E_CORE_ERROR` のみ捕捉し、1行1JSONで追記される。
 - Notes:
 - JSON推奨フィールド: `timestamp`, `type`, `message_masked`, `file_masked`, `line`, `site_url`
@@ -111,8 +111,8 @@
 
 3. 送信判定とレポート処理を実装する。
 - Files:
-- `wp-ai-error-report/includes/class-report-sender.php`
-- `wp-ai-error-report/includes/class-error-handler.php`
+- `includes/class-report-sender.php`
+- `includes/class-error-handler.php`
 - Interface impact: `init` 時およびエラー発生時の判定で、1時間以上経過したログのみAI解析対象になる。
 - Notes:
 - 判定は `last_report_attempted_at.touch` の `filemtime` を使用する。
@@ -125,7 +125,7 @@
 
 4. OpenAI通信・通知本文生成・送信を実装する。
 - Files:
-- `wp-ai-error-report/includes/class-report-sender.php`
+- `includes/class-report-sender.php`
 - Interface impact: 管理者宛レポートメール送信の代わりに、`config` 指定の宛先群へ送信される（未設定時は送信スキップ）。
 - Notes:
 - OpenAI呼び出しは `wp_remote_post('https://api.openai.com/v1/responses', ...)`
@@ -136,8 +136,8 @@
 
 5. 将来拡張ポイントを明示しつつPoC実装を閉じる。
 - Files:
-- `wp-ai-error-report/config.example.php`
-- `wp-ai-error-report/README.md`（作成する場合）
+- `config.example.php`
+- `README.md`（作成する場合）
 - Interface impact: 運用者向けに設定方法と制約が明確になる。
 - Notes:
 - プロンプト詳細は本計画では骨子のみとし、実装時に学習しながら確定する。
@@ -167,19 +167,19 @@
 
 ## Validation
 
-- Command: `php -l wp-ai-error-report/wp-ai-error-report.php`
+- Command: `php -l wp-ai-error-report.php`
 - Expected result: `No syntax errors detected`
 - Evidence location: 実装時ターミナル出力
 
-- Command: `php -l wp-ai-error-report/includes/class-error-handler.php`
+- Command: `php -l includes/class-error-handler.php`
 - Expected result: `No syntax errors detected`
 - Evidence location: 実装時ターミナル出力
 
-- Command: `php -l wp-ai-error-report/includes/class-report-sender.php`
+- Command: `php -l includes/class-report-sender.php`
 - Expected result: `No syntax errors detected`
 - Evidence location: 実装時ターミナル出力
 
-- Command: `php -l wp-ai-error-report/includes/class-masking.php`
+- Command: `php -l includes/class-masking.php`
 - Expected result: `No syntax errors detected`
 - Evidence location: 実装時ターミナル出力
 
@@ -222,3 +222,4 @@
 - 2026-02-14T16:46:52Z プラグイン配下 `logs` を廃止し、`uploads` 側のみを実ログ保存先として明確化。検証手順に再送抑止と失敗時保持を追加。
 - 2026-02-14T16:46:52Z `last_report_attempted_at.touch` 未作成時は即時送信可とするよう実装を同期（判定ファイル作成をエラー追記時ではなく送信試行時に限定）。
 - 2026-02-14T17:05:00Z 判定ファイル名を `last_report_attempt.touch` から `last_report_attempted_at.touch` へ変更し、実装・仕様書・ExecPlanの表記を統一。
+- 2026-02-15T04:41:46Z リポジトリ配下の `wp-ai-error-report/` ディレクトリを廃止し、プラグイン構成をリポジトリ直下（`wp-ai-error-report.php`, `includes/`, `config*.php`）へ移設。

@@ -10,7 +10,7 @@ WordPress で発生した Fatal 系エラーを検知し、AI で要約してメ
 
 ## セットアップ
 
-1. `wp-ai-error-report/config.example.php` を参考に `wp-ai-error-report/config.php` を作成
+1. `config.example.php` を参考に `config.php` を作成
 2. API キーと通知先メールアドレスを設定
 3. プラグインを有効化
 
